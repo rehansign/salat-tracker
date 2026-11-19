@@ -1,10 +1,10 @@
 'use strict';
-const VERSION='0.3';
+const VERSION='0.5';
 const $=(s,e=document)=>e.querySelector(s);
 const PR=['fajr','dhuhr','asr','maghrib','isha'];
 const NAME={fajr:'Fajr',dhuhr:'Dhuhr',asr:'Asr',maghrib:'Maghrib',isha:'Isha'};
 const CITIES={Sharjah:[25.3463,55.4209,4],Dubai:[25.2048,55.2708,4],'Abu Dhabi':[24.4539,54.3773,4],Ajman:[25.4052,55.5136,4],'Ras Al Khaimah':[25.7895,55.9432,4],Fujairah:[25.1288,56.3265,4],'Al Ain':[24.2075,55.7447,4],Makkah:[21.3891,39.8579,3],Madinah:[24.4672,39.6024,3],Riyadh:[24.7136,46.6753,3],Doha:[25.2854,51.531,3],Kuwait:[29.3759,47.9774,3],Muscat:[23.588,58.3829,4],Karachi:[24.8607,67.0011,5],Lahore:[31.5204,74.3587,5],Delhi:[28.6139,77.209,5.5],Dhaka:[23.8103,90.4125,6],Cairo:[30.0444,31.2357,'auto'],Istanbul:[41.0082,28.9784,'auto'],London:[51.5074,-0.1278,'auto']};
-const DEF={theme:'auto',fmt24:false,city:'Sharjah',lat:25.3463,lng:55.4209,method:'UAE',hanafi:false,notif:false,adhan:true,adhanName:'',accent:'teal',custom:'#1d6b62',amoled:false,pp:{fajr:1,dhuhr:1,asr:1,maghrib:1,isha:1}};
+const DEF={theme:'auto',fmt24:false,city:'Sharjah',lat:25.3463,lng:55.4209,method:'UAE',hanafi:false,notif:false,adhan:true,adhanName:'',dateMode:'gh',hAdj:0,accent:'teal',custom:'#1d6b62',amoled:false,pp:{fajr:1,dhuhr:1,asr:1,maghrib:1,isha:1}};
 
 /* ---------- storage (IndexedDB, on-device only) ---------- */
 let _db;const idb=()=>_db||(_db=new Promise((res,rej)=>{const r=indexedDB.open('salat',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)}));
@@ -30,6 +30,7 @@ function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('show');cl
 const prayed=v=>v==='ontime'||v==='late';
 const complete=k=>S.logs[k]&&PR.every(p=>prayed(S.logs[k][p]));
 const count=k=>S.logs[k]?PR.filter(p=>prayed(S.logs[k][p])).length:0;
+function hj(d){try{const x=addDays(d,S.set.hAdj||0),h=SalatCalc.hijri(x.getFullYear(),x.getMonth()+1,x.getDate());return{d:Math.floor(h.d),m:h.m,y:h.y}}catch(e){return null}}
 function hijri(d){try{return new Intl.DateTimeFormat('en-u-ca-islamic-umalqura',{day:'numeric',month:'long',year:'numeric'}).format(d)}catch(e){return''}}
 
 /* ---------- theme ---------- */
@@ -56,8 +57,10 @@ function viewToday(){
  if(isToday()){for(const p of PR){if(T[p].ts>now){nextP=p;nextTs=T[p].ts;break}}
   if(!nextP){const tm=times(addDays(cur,1));nextP='fajr';nextTs=tm.fajr.ts;}}
  const done=count(k);
- const dstr=cur.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'short'});
- return `<div class="head"><div><h1>${dstr}</h1><div class="mut sm">${hijri(cur)}</div></div>
+ const wd=cur.toLocaleDateString('en-GB',{weekday:'long'}),gdm=cur.toLocaleDateString('en-GB',{day:'numeric',month:'short'}),gy=cur.getFullYear(),H=hj(cur),dm=S.set.dateMode||'gh';
+ const gT=`${wd} ${gdm}`,hT=H?`${wd} ${H.d} ${H.m}`:gT,hS=H?`${H.d} ${H.m} ${H.y} AH`:'';
+ const [dstr,dsub]=dm==='hg'?[hT,`${gdm} ${gy}`]:dm==='g'?[gT,String(gy)]:dm==='h'?[hT,H?H.y+' AH':'']:[gT,hS];
+ return `<div class="head"><div><h1>${dstr}</h1><div class="mut sm">${dsub}</div></div>
   <div class="nav"><button class="ib" data-a="prev" aria-label="Previous day">‹</button><button class="ib" data-a="next" aria-label="Next day" ${isToday()?'disabled':''}>›</button></div></div>
   ${isToday()?`<div class="card pad next"><div><div class="mut sm">Next prayer</div><b>${NAME[nextP]}</b></div><div style="text-align:right"><div style="font-weight:600">${fmt(times(nextTs>T.isha.ts+1&&nextP==='fajr'?addDays(cur,1):cur)[nextP].h)}</div><div class="mut sm" id="cd">in ${dur(nextTs-now)}</div></div></div>`:`<div style="margin-bottom:12px"><button class="pill" data-a="today">Back to today</button></div>`}
   <div class="card">${PR.map(p=>`<div class="row ${nextP===p?'cur':''}"><div class="nm"><b>${NAME[p]}</b><span>${fmt(T[p].h)}</span></div><div class="seg">
@@ -104,6 +107,8 @@ function viewSettings(){const s=S.set,perm='Notification'in window?Notification.
  <div class="set"><span>24-hour time</span><button data-a="fmt">${Y(s.fmt24)}</button></div>
  <div class="set"><span>AMOLED black<br><span class="sm mut">Dark mode only</span></span><button data-a="amoled">${Y(s.amoled)}</button></div>
  <div class="set" style="display:block"><div class="mut sm" style="margin-bottom:10px">Accent color</div><div class="sws">${Object.keys(ACC).map(k=>`<button class="${s.accent===k?'on':''}" style="background:${ACC[k][0]}" data-a="accent" data-v="${k}" aria-label="${k}"></button>`).join('')}<label class="${s.accent==='custom'?'on':''}" style="background:conic-gradient(#e11d48,#f59e0b,#84cc16,#06b6d4,#6366f1,#d946ef,#e11d48)" aria-label="Custom color"><input type="color" data-c="custom" value="${s.custom}"></label></div></div></div>
+ <h2>Calendar</h2><div class="card"><div class="set"><span>Show dates</span><select data-c="datemode">${[['gh','Gregorian + Hijri'],['hg','Hijri + Gregorian'],['g','Gregorian only'],['h','Hijri only']].map(([k,l])=>`<option value="${k}" ${s.dateMode===k?'selected':''}>${l}</option>`).join('')}</select></div>
+ <div class="set"><span>Hijri adjustment<br><span class="sm mut">Umm al-Qura, ±2 days to match moon sighting</span></span><div class="seg" style="align-items:center"><button class="ib" data-a="hadj" data-n="-1">−</button><b style="min-width:28px;text-align:center">${(s.hAdj||0)>0?'+':''}${s.hAdj||0}</b><button class="ib" data-a="hadj" data-n="1">+</button></div></div></div>
  <h2>Prayer times</h2><div class="card"><div class="set"><span>City</span><select data-c="city">${Object.keys(CITIES).map(c=>`<option ${s.city===c?'selected':''}>${c}</option>`).join('')}<option value="GPS" ${s.city==='GPS'?'selected':''}>My location</option></select></div>
  <div class="set"><span>Use phone location</span><button class="btn sec" data-a="gps">Update</button></div>
  <div class="set"><span>Method</span><select data-c="method">${Object.entries(SalatCalc.METHODS).map(([k,m])=>`<option value="${k}" ${s.method===k?'selected':''}>${m.n}</option>`).join('')}</select></div>
@@ -115,6 +120,7 @@ function viewSettings(){const s=S.set,perm='Notification'in window?Notification.
  <div class="set"><span>Test alert</span><button class="btn sec" data-a="test">Play now</button></div></div>
  <p class="mut sm" style="margin:8px 4px">Android PWAs cannot wake themselves at prayer time. Alerts fire reliably while the app is open or recently used. Keep it open in the background for the adhan.</p>
  <h2>Data</h2><div class="card"><div class="set"><span>Backup</span><div class="seg"><button class="btn sec" data-a="export">Export</button><label class="btn sec" style="cursor:pointer">Import<input type="file" accept="application/json" data-c="import" hidden></label></div></div>
+ <div class="set"><span>Refresh app files<br><span class="sm mut">Loads the latest version. Keeps your data.</span></span><button class="btn sec" data-a="update">Update</button></div>
  <div class="set"><span>Erase all data</span><button class="btn danger" data-a="wipe">Erase</button></div></div>
  <p class="mut sm" style="text-align:center;margin-top:18px">Salat Tracker v${VERSION} · Everything is stored on this device</p>`}
 
@@ -171,6 +177,8 @@ const A={
  theme:d=>{S.set.theme=d.v;save();applyTheme();render()},
  fmt:()=>{S.set.fmt24=!S.set.fmt24;save();render()},
  accent:d=>{S.set.accent=d.v;save();applyTheme();render()},
+ update:async()=>{toast('Updating…');try{const rs=await navigator.serviceWorker.getRegistrations();for(const r of rs)await r.unregister();for(const k of await caches.keys())await caches.delete(k)}catch(e){}setTimeout(()=>location.reload(),400)},
+ hadj:d=>{S.set.hAdj=Math.max(-2,Math.min(2,(S.set.hAdj||0)+ +d.n));save();render()},
  amoled:()=>{S.set.amoled=!S.set.amoled;save();applyTheme();render()},
  asr:d=>{S.set.hanafi=d.v==='1';save();scheduleTriggers();render()},
  adhan:()=>{S.set.adhan=!S.set.adhan;save();unlock();render()},
@@ -191,7 +199,8 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-a]');if(!t
 $('#stop').onclick=stopAdhan;
 document.addEventListener('input',e=>{const t=e.target.closest('[data-c=custom]');if(!t)return;S.set.accent='custom';S.set.custom=t.value;applyTheme()});
 document.addEventListener('change',async e=>{const t=e.target.closest('[data-c]');if(!t)return;const c=t.dataset.c;
- if(c==='custom'){S.set.accent='custom';S.set.custom=t.value;save();applyTheme();render()}
+ if(c==='datemode'){S.set.dateMode=t.value;save();render()}
+ else if(c==='custom'){S.set.accent='custom';S.set.custom=t.value;save();applyTheme();render()}
  else if(c==='city'){S.set.city=t.value;save();scheduleTriggers();render()}
  else if(c==='method'){S.set.method=t.value;save();scheduleTriggers();render()}
  else if(c==='adhanfile'&&t.files[0]){const f=t.files[0];await kvSet('adhanBlob',f);S.set.adhanName=f.name;adhanUrl=URL.createObjectURL(f);save();render();toast('Adhan audio saved')}
@@ -204,7 +213,7 @@ document.addEventListener('change',async e=>{const t=e.target.closest('[data-c]'
   const b=await kvGet('adhanBlob');if(b)adhanUrl=URL.createObjectURL(b);
   if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}catch(e){}
  applyTheme();render();
- if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+ if('serviceWorker'in navigator){const had=!!navigator.serviceWorker.controller;navigator.serviceWorker.addEventListener('controllerchange',()=>{if(had&&!window._rl){window._rl=1;location.reload()}});navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>r.update()).catch(()=>{})}
  setInterval(tick,20000);tick();scheduleTriggers();
  document.addEventListener('visibilitychange',()=>{if(!document.hidden){if(isToday()&&dkey(cur)!==dkey(new Date()))cur=noon(new Date());tick();render()}});
 })();

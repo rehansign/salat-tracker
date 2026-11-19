@@ -1,4 +1,4 @@
-Salat Tracker v0.3
+Salat Tracker v0.5
 ==================
 Install on Android (one-time hosting needed, because installable PWAs require HTTPS):
 1. Upload this folder to any free static host:
