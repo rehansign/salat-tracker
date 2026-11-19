@@ -1,10 +1,10 @@
 'use strict';
-const VERSION='0.2';
+const VERSION='0.3';
 const $=(s,e=document)=>e.querySelector(s);
 const PR=['fajr','dhuhr','asr','maghrib','isha'];
 const NAME={fajr:'Fajr',dhuhr:'Dhuhr',asr:'Asr',maghrib:'Maghrib',isha:'Isha'};
 const CITIES={Sharjah:[25.3463,55.4209,4],Dubai:[25.2048,55.2708,4],'Abu Dhabi':[24.4539,54.3773,4],Ajman:[25.4052,55.5136,4],'Ras Al Khaimah':[25.7895,55.9432,4],Fujairah:[25.1288,56.3265,4],'Al Ain':[24.2075,55.7447,4],Makkah:[21.3891,39.8579,3],Madinah:[24.4672,39.6024,3],Riyadh:[24.7136,46.6753,3],Doha:[25.2854,51.531,3],Kuwait:[29.3759,47.9774,3],Muscat:[23.588,58.3829,4],Karachi:[24.8607,67.0011,5],Lahore:[31.5204,74.3587,5],Delhi:[28.6139,77.209,5.5],Dhaka:[23.8103,90.4125,6],Cairo:[30.0444,31.2357,'auto'],Istanbul:[41.0082,28.9784,'auto'],London:[51.5074,-0.1278,'auto']};
-const DEF={theme:'auto',fmt24:false,city:'Sharjah',lat:25.3463,lng:55.4209,method:'UAE',hanafi:false,notif:false,adhan:true,adhanName:'',pp:{fajr:1,dhuhr:1,asr:1,maghrib:1,isha:1}};
+const DEF={theme:'auto',fmt24:false,city:'Sharjah',lat:25.3463,lng:55.4209,method:'UAE',hanafi:false,notif:false,adhan:true,adhanName:'',accent:'teal',custom:'#1d6b62',amoled:false,pp:{fajr:1,dhuhr:1,asr:1,maghrib:1,isha:1}};
 
 /* ---------- storage (IndexedDB, on-device only) ---------- */
 let _db;const idb=()=>_db||(_db=new Promise((res,rej)=>{const r=indexedDB.open('salat',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)}));
@@ -33,8 +33,16 @@ const count=k=>S.logs[k]?PR.filter(p=>prayed(S.logs[k][p])).length:0;
 function hijri(d){try{return new Intl.DateTimeFormat('en-u-ca-islamic-umalqura',{day:'numeric',month:'long',year:'numeric'}).format(d)}catch(e){return''}}
 
 /* ---------- theme ---------- */
+const ACC={teal:['#1d6b62','#58c2b3'],indigo:['#4455c7','#8e9bff'],rose:['#c2415d','#f58aa1'],amber:['#b8740a','#eab24f'],slate:['#475569','#a3b1c6']};
+const lum=h=>{const c=[1,3,5].map(i=>parseInt(h.substr(i,2),16)/255).map(v=>v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4));return .2126*c[0]+.7152*c[1]+.0722*c[2]};
+const mixW=(h,t)=>'#'+[1,3,5].map(i=>Math.round(parseInt(h.substr(i,2),16)*(1-t)+255*t).toString(16).padStart(2,'0')).join('');
 function applyTheme(){const m=matchMedia('(prefers-color-scheme: dark)').matches;const t=S.set.theme==='auto'?(m?'dark':'light'):S.set.theme;
- document.documentElement.dataset.theme=t;$('meta[name=theme-color]').content=t==='dark'?'#0b1011':'#f3f5f6'}
+ const r=document.documentElement;r.dataset.theme=t;r.dataset.amoled=(t==='dark'&&S.set.amoled)?'1':'0';
+ const custom=S.set.accent==='custom'&&/^#[0-9a-f]{6}$/i.test(S.set.custom);
+ let ac=custom?S.set.custom:(ACC[S.set.accent]||ACC.teal)[t==='dark'?1:0];
+ if(custom&&t==='dark'&&lum(ac)<.2)ac=mixW(ac,.45);
+ r.style.setProperty('--ac',ac);r.style.setProperty('--ac2',`color-mix(in srgb,${ac} 16%,var(--card))`);r.style.setProperty('--onac',lum(ac)>.5?'#111':'#fff');
+ $('meta[name=theme-color]').content=t==='dark'?(S.set.amoled?'#000':'#0b1011'):'#f3f5f6'}
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change',applyTheme);
 
 /* ---------- views ---------- */
@@ -93,7 +101,9 @@ const Y=(on)=>`<span class="sw ${on?'on':''}"></span>`;
 function viewSettings(){const s=S.set,perm='Notification'in window?Notification.permission:'unsupported';
  return `<div class="head"><h1>Settings</h1></div>
  <h2>Appearance</h2><div class="card"><div class="set"><span>Theme</span><div class="tabs">${['auto','light','dark'].map(t=>`<button class="${s.theme===t?'on':''}" data-a="theme" data-v="${t}">${t[0].toUpperCase()+t.slice(1)}</button>`).join('')}</div></div>
- <div class="set"><span>24-hour time</span><button data-a="fmt">${Y(s.fmt24)}</button></div></div>
+ <div class="set"><span>24-hour time</span><button data-a="fmt">${Y(s.fmt24)}</button></div>
+ <div class="set"><span>AMOLED black<br><span class="sm mut">Dark mode only</span></span><button data-a="amoled">${Y(s.amoled)}</button></div>
+ <div class="set" style="display:block"><div class="mut sm" style="margin-bottom:10px">Accent color</div><div class="sws">${Object.keys(ACC).map(k=>`<button class="${s.accent===k?'on':''}" style="background:${ACC[k][0]}" data-a="accent" data-v="${k}" aria-label="${k}"></button>`).join('')}<label class="${s.accent==='custom'?'on':''}" style="background:conic-gradient(#e11d48,#f59e0b,#84cc16,#06b6d4,#6366f1,#d946ef,#e11d48)" aria-label="Custom color"><input type="color" data-c="custom" value="${s.custom}"></label></div></div></div>
  <h2>Prayer times</h2><div class="card"><div class="set"><span>City</span><select data-c="city">${Object.keys(CITIES).map(c=>`<option ${s.city===c?'selected':''}>${c}</option>`).join('')}<option value="GPS" ${s.city==='GPS'?'selected':''}>My location</option></select></div>
  <div class="set"><span>Use phone location</span><button class="btn sec" data-a="gps">Update</button></div>
  <div class="set"><span>Method</span><select data-c="method">${Object.entries(SalatCalc.METHODS).map(([k,m])=>`<option value="${k}" ${s.method===k?'selected':''}>${m.n}</option>`).join('')}</select></div>
@@ -160,6 +170,8 @@ const A={
  qada:d=>{S.qada=Math.max(0,S.qada+ +d.n);kvSet('qada',S.qada);render()},
  theme:d=>{S.set.theme=d.v;save();applyTheme();render()},
  fmt:()=>{S.set.fmt24=!S.set.fmt24;save();render()},
+ accent:d=>{S.set.accent=d.v;save();applyTheme();render()},
+ amoled:()=>{S.set.amoled=!S.set.amoled;save();applyTheme();render()},
  asr:d=>{S.set.hanafi=d.v==='1';save();scheduleTriggers();render()},
  adhan:()=>{S.set.adhan=!S.set.adhan;save();unlock();render()},
  pp:d=>{S.set.pp[d.p]=S.set.pp[d.p]?0:1;save();scheduleTriggers();render()},
@@ -177,8 +189,10 @@ const A={
 };
 document.addEventListener('click',e=>{const t=e.target.closest('[data-a]');if(!t||t.disabled)return;unlock();A[t.dataset.a]?.(t.dataset,t)});
 $('#stop').onclick=stopAdhan;
+document.addEventListener('input',e=>{const t=e.target.closest('[data-c=custom]');if(!t)return;S.set.accent='custom';S.set.custom=t.value;applyTheme()});
 document.addEventListener('change',async e=>{const t=e.target.closest('[data-c]');if(!t)return;const c=t.dataset.c;
- if(c==='city'){S.set.city=t.value;save();scheduleTriggers();render()}
+ if(c==='custom'){S.set.accent='custom';S.set.custom=t.value;save();applyTheme();render()}
+ else if(c==='city'){S.set.city=t.value;save();scheduleTriggers();render()}
  else if(c==='method'){S.set.method=t.value;save();scheduleTriggers();render()}
  else if(c==='adhanfile'&&t.files[0]){const f=t.files[0];await kvSet('adhanBlob',f);S.set.adhanName=f.name;adhanUrl=URL.createObjectURL(f);save();render();toast('Adhan audio saved')}
  else if(c==='import'&&t.files[0]){try{const j=JSON.parse(await t.files[0].text());if(j.app!=='salat-tracker')throw 0;
