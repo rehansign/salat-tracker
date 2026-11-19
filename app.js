@@ -1,5 +1,5 @@
 'use strict';
-const VERSION='0.1';
+const VERSION='0.2';
 const $=(s,e=document)=>e.querySelector(s);
 const PR=['fajr','dhuhr','asr','maghrib','isha'];
 const NAME={fajr:'Fajr',dhuhr:'Dhuhr',asr:'Asr',maghrib:'Maghrib',isha:'Isha'};
